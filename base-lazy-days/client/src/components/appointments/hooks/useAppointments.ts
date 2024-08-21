@@ -1,21 +1,28 @@
-import dayjs from "dayjs";
-import { useState } from "react";
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import dayjs from 'dayjs'
+import { useCallback, useEffect, useState } from 'react'
 
-import { AppointmentDateMap } from "../types";
-import { getAvailableAppointments } from "../utils";
-import { getMonthYearDetails, getNewMonthYear } from "./monthYear";
+import { AppointmentDateMap } from '../types'
+import { getAvailableAppointments } from '../utils'
+import { getMonthYearDetails, getNewMonthYear } from './monthYear'
 
-import { useLoginData } from "@/auth/AuthContext";
-import { axiosInstance } from "@/axiosInstance";
-import { queryKeys } from "@/react-query/constants";
+import { useLoginData } from '@/auth/AuthContext'
+import { axiosInstance } from '@/axiosInstance'
+import { queryKeys } from '@/react-query/constants'
+
+// COMMON OPTIONS FOR QUERY & PREFETCH
+const commonOptions = {
+  staleTime: 0,
+  gcTime: 1000 * 60 * 5,
+}
 
 // for useQuery call
 async function getAppointments(
   year: string,
   month: string
 ): Promise<AppointmentDateMap> {
-  const { data } = await axiosInstance.get(`/appointments/${year}/${month}`);
-  return data;
+  const { data } = await axiosInstance.get(`/appointments/${year}/${month}`)
+  return data
 }
 
 // The purpose of this hook:
@@ -29,26 +36,35 @@ async function getAppointments(
 export function useAppointments() {
   /** ****************** START 1: monthYear state *********************** */
   // get the monthYear for the current date (for default monthYear state)
-  const currentMonthYear = getMonthYearDetails(dayjs());
+  const currentMonthYear = getMonthYearDetails(dayjs())
 
   // state to track current monthYear chosen by user
   // state value is returned in hook return object
-  const [monthYear, setMonthYear] = useState(currentMonthYear);
+  const [monthYear, setMonthYear] = useState(currentMonthYear)
 
   // setter to update monthYear obj in state when user changes month in view,
   // returned in hook return object
   function updateMonthYear(monthIncrement: number): void {
-    setMonthYear((prevData) => getNewMonthYear(prevData, monthIncrement));
+    setMonthYear((prevData) => getNewMonthYear(prevData, monthIncrement))
   }
   /** ****************** END 1: monthYear state ************************* */
   /** ****************** START 2: filter appointments  ****************** */
   // State and functions for filtering appointments to show all or only available
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(false)
 
   // We will need imported function getAvailableAppointments here
   // We need the user to pass to getAvailableAppointments so we can show
   //   appointments that the logged-in user has reserved (in white)
-  const { userId } = useLoginData();
+  const { userId } = useLoginData()
+
+  // SELECT FUNCTION
+  const selectFn = useCallback(
+    (data: AppointmentDateMap, showAll: boolean) => {
+      if (showAll) return data
+      return getAvailableAppointments(data, userId)
+    },
+    [userId]
+  )
 
   /** ****************** END 2: filter appointments  ******************** */
   /** ****************** START 3: useQuery  ***************************** */
@@ -61,9 +77,35 @@ export function useAppointments() {
   //
   //    2. The getAppointments query function needs monthYear.year and
   //       monthYear.month
-  const appointments: AppointmentDateMap = {};
+  const fallback: AppointmentDateMap = {}
+
+  const { data: appointments = fallback } = useQuery({
+    queryKey: [queryKeys.appointments, monthYear.year, monthYear.month],
+    queryFn: () => getAppointments(monthYear.year, monthYear.month),
+    // SELECT
+    select: (data) => selectFn(data, showAll),
+    refetchOnWindowFocus: true,
+    refetchInterval: 1000 * 60, // every second; not recommended for production
+    ...commonOptions,
+  })
+
+  // PRE FETCH NEXT MONTH APPOINTMENTS
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const nextMonthYear = getNewMonthYear(monthYear, 1)
+    queryClient.prefetchQuery({
+      queryKey: [
+        queryKeys.appointments,
+        nextMonthYear.year,
+        nextMonthYear.month,
+      ],
+      queryFn: () => getAppointments(nextMonthYear.year, nextMonthYear.month),
+      ...commonOptions,
+    })
+  }, [monthYear, queryClient])
 
   /** ****************** END 3: useQuery  ******************************* */
 
-  return { appointments, monthYear, updateMonthYear, showAll, setShowAll };
+  return { appointments, monthYear, updateMonthYear, showAll, setShowAll }
 }

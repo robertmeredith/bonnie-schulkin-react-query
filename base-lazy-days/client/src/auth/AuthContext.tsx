@@ -39,11 +39,13 @@ export const AuthContextProvider = ({
   const userId = loginData?.userId;
   const userToken = loginData?.userToken;
 
+  // Set user data in state and localstorage
   const setLoginData = ({ userId, userToken }: LoginData) => {
     setLoginDataRaw({ userId, userToken });
     setStoredLoginData({ userId, userToken });
   };
 
+  // Clear user data in state and localStorage
   const clearLoginData = () => {
     setLoginDataRaw(null);
     clearStoredLoginData();

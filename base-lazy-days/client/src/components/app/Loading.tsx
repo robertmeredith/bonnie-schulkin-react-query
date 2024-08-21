@@ -1,9 +1,13 @@
 import { Spinner, Text } from "@chakra-ui/react";
+import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 
 export function Loading() {
   // will use React Query `useIsFetching` to determine whether or not to display
-  const isFetching = false; // for now, just don't display
-  const display = isFetching ? "inherit" : "none";
+  const isFetching = useIsFetching();
+  const isMutating = useIsMutating()
+  
+  const display = isFetching || isMutating ? "inherit" : "none";
+
 
   return (
     <Spinner
